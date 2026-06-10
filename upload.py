@@ -95,7 +95,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Guild Member Rankings")
+st.title("Running Dawn Guild Member Rankings")
 st.markdown("Explore the leaderboards for different statistics in the guild. Select a main category below, choose a subcategory, and use the search bar to find specific players.")
 
 @st.cache_data(ttl=3600)
@@ -168,8 +168,8 @@ with st.spinner("Fetching data from Albion servers..."):
     df = process_data(raw_data)
 
 if not df.empty:
-    # 6 Large Main Categories Tabs
-    tabs = st.tabs(["PvE", "Gathering", "Crafting", "Fishing", "Farming", "PvP"])
+    # 6 Large Main Categories Tabs (PvP moved to the front)
+    tabs = st.tabs(["PvP", "PvE", "Gathering", "Crafting", "Fishing", "Farming"])
     
     zone_options = ["Total", "Mainland (Royal)", "Outlands", "Avalon", "Hellgate", "Corrupted Dungeon", "Mists"]
     pvp_options = ["Kill Fame", "Death Fame", "Fame Ratio"]
@@ -185,8 +185,26 @@ if not df.empty:
         html_block = f'<div class="custom-table-container">{html_table}</div>'
         st.markdown(html_block, unsafe_allow_html=True)
 
-    # --- 1. PvE Tab ---
+    # --- 1. PvP Tab ---
     with tabs[0]:
+        st.subheader("PvP Rankings")
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            search_term = st.text_input("Search Player", key="pvp_search")
+        with col2:
+            selected_sub = st.selectbox("Select Statistic", pvp_options, key="pvp_sub")
+            
+        actual_stat_name = f"PvP - {selected_sub}"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        render_custom_table(stat_df, actual_stat_name)
+
+    # --- 2. PvE Tab ---
+    with tabs[1]:
         st.subheader("PvE Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -204,8 +222,8 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
 
-    # --- 2. Gathering Tab ---
-    with tabs[1]:
+    # --- 3. Gathering Tab ---
+    with tabs[2]:
         st.subheader("Gathering Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -224,8 +242,8 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
 
-    # --- 3. Crafting Tab ---
-    with tabs[2]:
+    # --- 4. Crafting Tab ---
+    with tabs[3]:
         st.subheader("Crafting Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -242,8 +260,8 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
 
-    # --- 4. Fishing Tab ---
-    with tabs[3]:
+    # --- 5. Fishing Tab ---
+    with tabs[4]:
         st.subheader("Fishing Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -258,32 +276,14 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
         
-    # --- 5. Farming Tab ---
-    with tabs[4]:
+    # --- 6. Farming Tab ---
+    with tabs[5]:
         st.subheader("Farming Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
             search_term = st.text_input("Search Player", key="farm_search")
             
         actual_stat_name = "Farming Fame"
-        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
-        stat_df.index += 1
-        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
-        if search_term:
-            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
-            
-        render_custom_table(stat_df, actual_stat_name)
-
-    # --- 6. PvP Tab ---
-    with tabs[5]:
-        st.subheader("PvP Rankings")
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            search_term = st.text_input("Search Player", key="pvp_search")
-        with col2:
-            selected_sub = st.selectbox("Select Statistic", pvp_options, key="pvp_sub")
-            
-        actual_stat_name = f"PvP - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
         stat_df.index += 1
         stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
