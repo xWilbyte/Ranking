@@ -5,7 +5,7 @@ import requests
 # Configure the Streamlit page
 st.set_page_config(page_title="Albion Guild Rankings", layout="wide")
 
-# Inject Custom CSS to center text everywhere and style the custom scrollable HTML table
+# Inject Custom CSS to lock layout sizing, make tabs bigger, and center text
 st.markdown("""
 <style>
     /* Center all headers and paragraph text */
@@ -29,9 +29,17 @@ st.markdown("""
         text-align: center !important;
     }
     
-    /* Center the Tabs */
+    /* Center and enlarge the Main Tabs */
     .stTabs [data-baseweb="tab-list"] {
         justify-content: center;
+        gap: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        font-size: 20px !important;
+        font-weight: 600 !important;
+        padding: 12px 28px !important;
+        height: auto !important;
+        border-radius: 4px;
     }
     
     /* Center selectbox text */
@@ -40,12 +48,12 @@ st.markdown("""
         text-align: center;
     }
     
-    /* Custom HTML Table Styling to guarantee centering */
+    /* Custom HTML Table Container with forced static sizing */
     .custom-table-container {
         max-height: 500px;
         overflow-y: auto;
         width: 100%;
-        margin-top: 15px;
+        margin-top: 25px;
         border: 1px solid rgba(128, 128, 128, 0.3);
         border-radius: 5px;
     }
@@ -54,22 +62,31 @@ st.markdown("""
         border-collapse: collapse;
         text-align: center;
         font-family: sans-serif;
+        table-layout: fixed; /* Forces absolute adherence to column widths below */
     }
-    /* Sticky header */
+    /* Lock column proportions so the table never changes scale */
+    .custom-table th:nth-child(1), .custom-table td:nth-child(1) { width: 15% !important; }
+    .custom-table th:nth-child(2), .custom-table td:nth-child(2) { width: 50% !important; }
+    .custom-table th:nth-child(3), .custom-table td:nth-child(3) { width: 35% !important; }
+
+    /* Sticky header styles */
     .custom-table th {
         position: sticky;
         top: 0;
         background-color: rgba(128, 128, 128, 0.15); 
         backdrop-filter: blur(5px);
-        padding: 12px;
+        padding: 14px;
         border-bottom: 2px solid rgba(128, 128, 128, 0.5);
         z-index: 1;
         text-align: center !important;
     }
     .custom-table td {
-        padding: 10px;
+        padding: 12px;
         border-bottom: 1px solid rgba(128, 128, 128, 0.2);
         text-align: center !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     /* Hover effect */
     .custom-table tr:hover {
@@ -98,7 +115,6 @@ def process_data(raw_data):
         
     parsed_data = []
     
-    # Map API keys to user-friendly subcategory names
     sub_keys = {
         "Total": "Total",
         "Royal": "Mainland (Royal)",
@@ -131,7 +147,7 @@ def process_data(raw_data):
         for api_key, display_name in sub_keys.items():
             stats[f"Crafting - {display_name}"] = crafting.get(api_key, 0)
             
-        # Gathering Subcategories (Nested under Resource > Area)
+        # Gathering Subcategories
         gathering = lifetime.get("Gathering", {})
         for res in gathering_resources:
             res_data = gathering.get(res, {})
@@ -152,40 +168,32 @@ with st.spinner("Fetching data from Albion servers..."):
     df = process_data(raw_data)
 
 if not df.empty:
-    # 6 Main Categories
+    # 6 Large Main Categories Tabs
     tabs = st.tabs(["PvE", "Gathering", "Crafting", "Fishing", "Farming", "PvP"])
     
-    # Options mappings
     zone_options = ["Total", "Mainland (Royal)", "Outlands", "Avalon", "Hellgate", "Corrupted Dungeon", "Mists"]
     pvp_options = ["Kill Fame", "Death Fame", "Fame Ratio"]
     gathering_resources = ["All", "Fiber", "Hide", "Ore", "Rock", "Wood"]
 
     def render_custom_table(stat_df, stat_name):
-        # Apply comma formatting specifically to the target column
         if "Ratio" in stat_name:
             stat_df[stat_name] = stat_df[stat_name].map("{:,.2f}".format)
         else:
             stat_df[stat_name] = stat_df[stat_name].map("{:,}".format)
             
-        # Convert the Pandas DataFrame into a pure HTML table for perfect CSS control
         html_table = stat_df.to_html(index=False, classes="custom-table", escape=False)
-        
-        # Render the scrollable container and the table inside it
-        html_block = f"""
-        <div class="custom-table-container">
-            {html_table}
-        </div>
-        """
+        html_block = f'<div class="custom-table-container">{html_table}</div>'
         st.markdown(html_block, unsafe_allow_html=True)
 
     # --- 1. PvE Tab ---
     with tabs[0]:
         st.subheader("PvE Rankings")
-        col1, col2 = st.columns([1, 1])
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            selected_sub = st.selectbox("Select Zone", zone_options, key="pve_sub")
-        with col2:
             search_term = st.text_input("Search Player", key="pve_search")
+        with col2:
+            selected_sub = st.selectbox("Select Zone", zone_options, key="pve_sub")
+        # col3 left empty to preserve grid symmetry
             
         actual_stat_name = f"PvE - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
@@ -201,11 +209,11 @@ if not df.empty:
         st.subheader("Gathering Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            selected_res = st.selectbox("Select Resource", gathering_resources, index=0, key="gather_res")
-        with col2:
-            selected_sub = st.selectbox("Select Zone", zone_options, key="gather_sub")
-        with col3:
             search_term = st.text_input("Search Player", key="gather_search")
+        with col2:
+            selected_res = st.selectbox("Select Resource", gathering_resources, index=0, key="gather_res")
+        with col3:
+            selected_sub = st.selectbox("Select Zone", zone_options, key="gather_sub")
             
         actual_stat_name = f"Gathering - {selected_res} - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
@@ -219,11 +227,11 @@ if not df.empty:
     # --- 3. Crafting Tab ---
     with tabs[2]:
         st.subheader("Crafting Rankings")
-        col1, col2 = st.columns([1, 1])
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            selected_sub = st.selectbox("Select Zone", zone_options, key="craft_sub")
-        with col2:
             search_term = st.text_input("Search Player", key="craft_search")
+        with col2:
+            selected_sub = st.selectbox("Select Zone", zone_options, key="craft_sub")
             
         actual_stat_name = f"Crafting - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
@@ -237,8 +245,8 @@ if not df.empty:
     # --- 4. Fishing Tab ---
     with tabs[3]:
         st.subheader("Fishing Rankings")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
             search_term = st.text_input("Search Player", key="fish_search")
             
         actual_stat_name = "Fishing Fame"
@@ -253,8 +261,8 @@ if not df.empty:
     # --- 5. Farming Tab ---
     with tabs[4]:
         st.subheader("Farming Rankings")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
             search_term = st.text_input("Search Player", key="farm_search")
             
         actual_stat_name = "Farming Fame"
@@ -269,11 +277,11 @@ if not df.empty:
     # --- 6. PvP Tab ---
     with tabs[5]:
         st.subheader("PvP Rankings")
-        col1, col2 = st.columns([1, 1])
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            selected_sub = st.selectbox("Select Statistic", pvp_options, key="pvp_sub")
-        with col2:
             search_term = st.text_input("Search Player", key="pvp_search")
+        with col2:
+            selected_sub = st.selectbox("Select Statistic", pvp_options, key="pvp_sub")
             
         actual_stat_name = f"PvP - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
