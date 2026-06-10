@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# Configure the Streamlit page without emojis
+# Configure the Streamlit page
 st.set_page_config(page_title="Albion Guild Rankings", layout="wide")
 
-# Inject Custom CSS to center text everywhere
+# Inject Custom CSS to center text everywhere and style the custom scrollable HTML table
 st.markdown("""
 <style>
     /* Center all headers and paragraph text */
@@ -38,6 +38,42 @@ st.markdown("""
     div[data-baseweb="select"] {
         justify-content: center;
         text-align: center;
+    }
+    
+    /* Custom HTML Table Styling to guarantee centering */
+    .custom-table-container {
+        max-height: 500px;
+        overflow-y: auto;
+        width: 100%;
+        margin-top: 15px;
+        border: 1px solid rgba(128, 128, 128, 0.3);
+        border-radius: 5px;
+    }
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: center;
+        font-family: sans-serif;
+    }
+    /* Sticky header */
+    .custom-table th {
+        position: sticky;
+        top: 0;
+        background-color: rgba(128, 128, 128, 0.15); 
+        backdrop-filter: blur(5px);
+        padding: 12px;
+        border-bottom: 2px solid rgba(128, 128, 128, 0.5);
+        z-index: 1;
+        text-align: center !important;
+    }
+    .custom-table td {
+        padding: 10px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+        text-align: center !important;
+    }
+    /* Hover effect */
+    .custom-table tr:hover {
+        background-color: rgba(128, 128, 128, 0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -73,14 +109,15 @@ def process_data(raw_data):
         "Mists": "Mists"
     }
     
+    gathering_resources = ["All", "Fiber", "Hide", "Ore", "Rock", "Wood"]
+    
     for member in raw_data:
-        # Base stats (Combat)
-        stats = {
-            "Name": member.get("Name", "Unknown"),
-            "Kill Fame": member.get("KillFame", 0),
-            "Death Fame": member.get("DeathFame", 0),
-            "Fame Ratio": member.get("FameRatio", 0.0),
-        }
+        stats = {"Name": member.get("Name", "Unknown")}
+        
+        # PvP Stats
+        stats["PvP - Kill Fame"] = member.get("KillFame", 0)
+        stats["PvP - Death Fame"] = member.get("DeathFame", 0)
+        stats["PvP - Fame Ratio"] = member.get("FameRatio", 0.0)
         
         lifetime = member.get("LifetimeStatistics", {})
         
@@ -94,11 +131,17 @@ def process_data(raw_data):
         for api_key, display_name in sub_keys.items():
             stats[f"Crafting - {display_name}"] = crafting.get(api_key, 0)
             
-        # Gathering Subcategories (Nested under "All")
-        gathering = lifetime.get("Gathering", {}).get("All", {})
-        for api_key, display_name in sub_keys.items():
-            stats[f"Gathering - {display_name}"] = gathering.get(api_key, 0)
-            
+        # Gathering Subcategories (Nested under Resource > Area)
+        gathering = lifetime.get("Gathering", {})
+        for res in gathering_resources:
+            res_data = gathering.get(res, {})
+            for api_key, display_name in sub_keys.items():
+                stats[f"Gathering - {res} - {display_name}"] = res_data.get(api_key, 0)
+        
+        # Fishing and Farming Fame
+        stats["Fishing Fame"] = lifetime.get("FishingFame", 0)
+        stats["Farming Fame"] = lifetime.get("FarmingFame", 0)
+        
         parsed_data.append(stats)
         
     return pd.DataFrame(parsed_data)
@@ -109,61 +152,137 @@ with st.spinner("Fetching data from Albion servers..."):
     df = process_data(raw_data)
 
 if not df.empty:
-    # Define our Main Categories
-    tabs = st.tabs(["Combat", "PvE", "Gathering", "Crafting"])
+    # 6 Main Categories
+    tabs = st.tabs(["PvE", "Gathering", "Crafting", "Fishing", "Farming", "PvP"])
     
-    # Define which stats belong to which tab
-    category_mappings = {
-        "Combat": ["Kill Fame", "Death Fame", "Fame Ratio"],
-        "PvE": [col for col in df.columns if col.startswith("PvE - ")],
-        "Gathering": [col for col in df.columns if col.startswith("Gathering - ")],
-        "Crafting": [col for col in df.columns if col.startswith("Crafting - ")]
-    }
+    # Options mappings
+    zone_options = ["Total", "Mainland (Royal)", "Outlands", "Avalon", "Hellgate", "Corrupted Dungeon", "Mists"]
+    pvp_options = ["Kill Fame", "Death Fame", "Fame Ratio"]
+    gathering_resources = ["All", "Fiber", "Hide", "Ore", "Rock", "Wood"]
 
-    # Function to render the UI for a specific tab
-    def render_tab_content(tab_name, stat_columns):
-        # Clean up names for the dropdown box (e.g. "PvE - Avalon" -> "Avalon")
-        display_options = [col.split(" - ")[-1] if " - " in col else col for col in stat_columns]
+    def render_custom_table(stat_df, stat_name):
+        # Apply comma formatting specifically to the target column
+        if "Ratio" in stat_name:
+            stat_df[stat_name] = stat_df[stat_name].map("{:,.2f}".format)
+        else:
+            stat_df[stat_name] = stat_df[stat_name].map("{:,}".format)
+            
+        # Convert the Pandas DataFrame into a pure HTML table for perfect CSS control
+        html_table = stat_df.to_html(index=False, classes="custom-table", escape=False)
         
+        # Render the scrollable container and the table inside it
+        html_block = f"""
+        <div class="custom-table-container">
+            {html_table}
+        </div>
+        """
+        st.markdown(html_block, unsafe_allow_html=True)
+
+    # --- 1. PvE Tab ---
+    with tabs[0]:
+        st.subheader("PvE Rankings")
         col1, col2 = st.columns([1, 1])
         with col1:
-            selected_display = st.selectbox("Select Subcategory", display_options, key=f"select_{tab_name}")
+            selected_sub = st.selectbox("Select Zone", zone_options, key="pve_sub")
         with col2:
-            search_term = st.text_input("Search Player", key=f"search_{tab_name}")
+            search_term = st.text_input("Search Player", key="pve_search")
             
-        # Get the actual dataframe column name based on selection
-        actual_stat_name = stat_columns[display_options.index(selected_display)]
-        
-        # Prepare Data
-        stat_df = df[["Name", actual_stat_name]].copy()
-        stat_df = stat_df.sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
-        stat_df.index = stat_df.index + 1
+        actual_stat_name = f"PvE - {selected_sub}"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
         stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
-        
-        # Filter by search
         if search_term:
             stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
             
-        # Format commas and center text using Pandas Styler
-        format_dict = {actual_stat_name: "{:,.2f}" if "Ratio" in actual_stat_name else "{:,}"}
-        
-        styled_df = stat_df.style \
-            .set_properties(**{'text-align': 'center'}) \
-            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]) \
-            .format(format_dict)
-            
-        st.dataframe(
-            styled_df,
-            use_container_width=True,
-            hide_index=True,
-            height=500
-        )
+        render_custom_table(stat_df, actual_stat_name)
 
-    # Render each tab
-    for tab, tab_name in zip(tabs, ["Combat", "PvE", "Gathering", "Crafting"]):
-        with tab:
-            st.subheader(f"{tab_name} Rankings")
-            render_tab_content(tab_name, category_mappings[tab_name])
+    # --- 2. Gathering Tab ---
+    with tabs[1]:
+        st.subheader("Gathering Rankings")
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            selected_res = st.selectbox("Select Resource", gathering_resources, index=0, key="gather_res")
+        with col2:
+            selected_sub = st.selectbox("Select Zone", zone_options, key="gather_sub")
+        with col3:
+            search_term = st.text_input("Search Player", key="gather_search")
+            
+        actual_stat_name = f"Gathering - {selected_res} - {selected_sub}"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        render_custom_table(stat_df, actual_stat_name)
+
+    # --- 3. Crafting Tab ---
+    with tabs[2]:
+        st.subheader("Crafting Rankings")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            selected_sub = st.selectbox("Select Zone", zone_options, key="craft_sub")
+        with col2:
+            search_term = st.text_input("Search Player", key="craft_search")
+            
+        actual_stat_name = f"Crafting - {selected_sub}"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        render_custom_table(stat_df, actual_stat_name)
+
+    # --- 4. Fishing Tab ---
+    with tabs[3]:
+        st.subheader("Fishing Rankings")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            search_term = st.text_input("Search Player", key="fish_search")
+            
+        actual_stat_name = "Fishing Fame"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        render_custom_table(stat_df, actual_stat_name)
+        
+    # --- 5. Farming Tab ---
+    with tabs[4]:
+        st.subheader("Farming Rankings")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            search_term = st.text_input("Search Player", key="farm_search")
+            
+        actual_stat_name = "Farming Fame"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        render_custom_table(stat_df, actual_stat_name)
+
+    # --- 6. PvP Tab ---
+    with tabs[5]:
+        st.subheader("PvP Rankings")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            selected_sub = st.selectbox("Select Statistic", pvp_options, key="pvp_sub")
+        with col2:
+            search_term = st.text_input("Search Player", key="pvp_search")
+            
+        actual_stat_name = f"PvP - {selected_sub}"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        render_custom_table(stat_df, actual_stat_name)
 
 else:
     st.warning("No data found or failed to parse the guild data.")
