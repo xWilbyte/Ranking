@@ -2,10 +2,8 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# Configure the Streamlit page
 st.set_page_config(page_title="Albion Guild Rankings", layout="wide")
 
-# Inject Custom CSS to lock layout sizing, make tabs bigger, and center text
 st.markdown("""
 <style>
     /* Center all headers and paragraph text */
@@ -95,7 +93,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Running Dawn Guild Member Rankings")
+st.title("Running Dawn Fame Ranks")
 st.markdown("Explore the leaderboards for different statistics in the guild. Select a main category below, choose a subcategory, and use the search bar to find specific players.")
 
 @st.cache_data(ttl=3600)
@@ -158,7 +156,7 @@ def process_data(raw_data):
         stats["Fishing Fame"] = lifetime.get("FishingFame", 0)
         stats["Farming Fame"] = lifetime.get("FarmingFame", 0)
         
-        # Calculate Accumulated Total Fame across all primary activities
+        # Accumulated Total Fame across all primary activities
         stats["Total Fame"] = (
             stats["PvP - Kill Fame"] +
             stats["PvE - Total"] +
@@ -178,10 +176,13 @@ with st.spinner("Fetching data from Albion servers..."):
     df = process_data(raw_data)
 
 if not df.empty:
-    # 7 Large Main Categories Tabs (Total moved to the far left)
+    # 7 Large Main Categories Tabs
     tabs = st.tabs(["Total", "PvP", "PvE", "Gathering", "Crafting", "Fishing", "Farming"])
     
-    zone_options = ["Total", "Mainland (Royal)", "Outlands", "Avalon", "Hellgate", "Corrupted Dungeon", "Mists"]
+    # Split zone selections to fix subcategory distribution errors
+    pve_zone_options = ["Total", "Mainland (Royal)", "Outlands", "Avalon", "Hellgate", "Corrupted Dungeon", "Mists"]
+    standard_zone_options = ["Total", "Mainland (Royal)", "Outlands", "Avalon"]
+    
     pvp_options = ["Kill Fame", "Death Fame", "Fame Ratio"]
     gathering_resources = ["All", "Fiber", "Hide", "Ore", "Rock", "Wood"]
 
@@ -201,7 +202,6 @@ if not df.empty:
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
             search_term = st.text_input("Search Player", key="total_search")
-        # col2 and col3 left empty to maintain layout grid structural symmetry
             
         actual_stat_name = "Total Fame"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
@@ -237,7 +237,7 @@ if not df.empty:
         with col1:
             search_term = st.text_input("Search Player", key="pve_search")
         with col2:
-            selected_sub = st.selectbox("Select Zone", zone_options, key="pve_sub")
+            selected_sub = st.selectbox("Select Zone", pve_zone_options, key="pve_sub")
             
         actual_stat_name = f"PvE - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
@@ -257,7 +257,7 @@ if not df.empty:
         with col2:
             selected_res = st.selectbox("Select Resource", gathering_resources, index=0, key="gather_res")
         with col3:
-            selected_sub = st.selectbox("Select Zone", zone_options, key="gather_sub")
+            selected_sub = st.selectbox("Select Zone", standard_zone_options, key="gather_sub")
             
         actual_stat_name = f"Gathering - {selected_res} - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
@@ -275,7 +275,7 @@ if not df.empty:
         with col1:
             search_term = st.text_input("Search Player", key="craft_search")
         with col2:
-            selected_sub = st.selectbox("Select Zone", zone_options, key="craft_sub")
+            selected_sub = st.selectbox("Select Zone", standard_zone_options, key="craft_sub")
             
         actual_stat_name = f"Crafting - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
