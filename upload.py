@@ -158,6 +158,16 @@ def process_data(raw_data):
         stats["Fishing Fame"] = lifetime.get("FishingFame", 0)
         stats["Farming Fame"] = lifetime.get("FarmingFame", 0)
         
+        # Calculate Accumulated Total Fame across all primary activities
+        stats["Total Fame"] = (
+            stats["PvP - Kill Fame"] +
+            stats["PvE - Total"] +
+            stats["Crafting - Total"] +
+            stats["Gathering - All - Total"] +
+            stats["Fishing Fame"] +
+            stats["Farming Fame"]
+        )
+        
         parsed_data.append(stats)
         
     return pd.DataFrame(parsed_data)
@@ -168,8 +178,8 @@ with st.spinner("Fetching data from Albion servers..."):
     df = process_data(raw_data)
 
 if not df.empty:
-    # 6 Large Main Categories Tabs (PvP moved to the front)
-    tabs = st.tabs(["PvP", "PvE", "Gathering", "Crafting", "Fishing", "Farming"])
+    # 7 Large Main Categories Tabs (Total moved to the far left)
+    tabs = st.tabs(["Total", "PvP", "PvE", "Gathering", "Crafting", "Fishing", "Farming"])
     
     zone_options = ["Total", "Mainland (Royal)", "Outlands", "Avalon", "Hellgate", "Corrupted Dungeon", "Mists"]
     pvp_options = ["Kill Fame", "Death Fame", "Fame Ratio"]
@@ -185,8 +195,25 @@ if not df.empty:
         html_block = f'<div class="custom-table-container">{html_table}</div>'
         st.markdown(html_block, unsafe_allow_html=True)
 
-    # --- 1. PvP Tab ---
+    # --- 1. Total Tab ---
     with tabs[0]:
+        st.subheader("Overall Total Fame Rankings")
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            search_term = st.text_input("Search Player", key="total_search")
+        # col2 and col3 left empty to maintain layout grid structural symmetry
+            
+        actual_stat_name = "Total Fame"
+        stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index += 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        render_custom_table(stat_df, actual_stat_name)
+
+    # --- 2. PvP Tab ---
+    with tabs[1]:
         st.subheader("PvP Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -203,15 +230,14 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
 
-    # --- 2. PvE Tab ---
-    with tabs[1]:
+    # --- 3. PvE Tab ---
+    with tabs[2]:
         st.subheader("PvE Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
             search_term = st.text_input("Search Player", key="pve_search")
         with col2:
             selected_sub = st.selectbox("Select Zone", zone_options, key="pve_sub")
-        # col3 left empty to preserve grid symmetry
             
         actual_stat_name = f"PvE - {selected_sub}"
         stat_df = df[["Name", actual_stat_name]].sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
@@ -222,8 +248,8 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
 
-    # --- 3. Gathering Tab ---
-    with tabs[2]:
+    # --- 4. Gathering Tab ---
+    with tabs[3]:
         st.subheader("Gathering Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -242,8 +268,8 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
 
-    # --- 4. Crafting Tab ---
-    with tabs[3]:
+    # --- 5. Crafting Tab ---
+    with tabs[4]:
         st.subheader("Crafting Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -260,8 +286,8 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
 
-    # --- 5. Fishing Tab ---
-    with tabs[4]:
+    # --- 6. Fishing Tab ---
+    with tabs[5]:
         st.subheader("Fishing Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
@@ -276,8 +302,8 @@ if not df.empty:
             
         render_custom_table(stat_df, actual_stat_name)
         
-    # --- 6. Farming Tab ---
-    with tabs[5]:
+    # --- 7. Farming Tab ---
+    with tabs[6]:
         st.subheader("Farming Rankings")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
