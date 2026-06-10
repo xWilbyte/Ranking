@@ -2,32 +2,79 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# Configure the Streamlit page
-st.set_page_config(page_title="Albion Guild Rankings", page_icon="⚔️", layout="wide")
+# Configure the Streamlit page without emojis
+st.set_page_config(page_title="Albion Guild Rankings", layout="wide")
 
-st.title("⚔️ Guild Member Rankings")
-st.markdown("Explore the leaderboards for different statistics in the guild. Use the tabs to switch between stats and the search bar to find specific players.")
+# Inject Custom CSS to center text everywhere
+st.markdown("""
+<style>
+    /* Center all headers and paragraph text */
+    h1, h2, h3, h4, h5, h6, p {
+        text-align: center !important;
+        justify-content: center !important;
+    }
+    
+    /* Center the contents of the block container */
+    .block-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    /* Center input fields and their labels */
+    .stTextInput > div[data-baseweb="input"] {
+        text-align: center;
+    }
+    .stTextInput input {
+        text-align: center !important;
+    }
+    
+    /* Center the Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        justify-content: center;
+    }
+    
+    /* Center selectbox text */
+    div[data-baseweb="select"] {
+        justify-content: center;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# Fetch data from the API and cache it for 1 hour (3600 seconds) to prevent spamming
+st.title("Guild Member Rankings")
+st.markdown("Explore the leaderboards for different statistics in the guild. Select a main category below, choose a subcategory, and use the search bar to find specific players.")
+
 @st.cache_data(ttl=3600)
 def fetch_guild_data():
     url = "https://gameinfo.albiononline.com/api/gameinfo/guilds/XwoUKN3TRGKDRXnvjbc3Rg/members"
     try:
         response = requests.get(url)
-        response.raise_for_status()  # Check for HTTP errors
+        response.raise_for_status() 
         return response.json()
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching data from API: {e}")
         return []
 
-# Process the nested JSON data into a flat Pandas DataFrame
 def process_data(raw_data):
     if not raw_data:
         return pd.DataFrame()
         
     parsed_data = []
+    
+    # Map API keys to user-friendly subcategory names
+    sub_keys = {
+        "Total": "Total",
+        "Royal": "Mainland (Royal)",
+        "Outlands": "Outlands",
+        "Avalon": "Avalon",
+        "Hellgate": "Hellgate",
+        "CorruptedDungeon": "Corrupted Dungeon",
+        "Mists": "Mists"
+    }
+    
     for member in raw_data:
-        # Extract base stats
+        # Base stats (Combat)
         stats = {
             "Name": member.get("Name", "Unknown"),
             "Kill Fame": member.get("KillFame", 0),
@@ -35,72 +82,88 @@ def process_data(raw_data):
             "Fame Ratio": member.get("FameRatio", 0.0),
         }
         
-        # Safely extract nested Lifetime Statistics
         lifetime = member.get("LifetimeStatistics", {})
         
-        stats["PvE Fame"] = lifetime.get("PvE", {}).get("Total", 0)
-        stats["Crafting Fame"] = lifetime.get("Crafting", {}).get("Total", 0)
-        
-        # Gathering fame is usually nested one layer deeper under "All"
-        stats["Gathering Fame"] = lifetime.get("Gathering", {}).get("All", {}).get("Total", 0)
-        
+        # PvE Subcategories
+        pve = lifetime.get("PvE", {})
+        for api_key, display_name in sub_keys.items():
+            stats[f"PvE - {display_name}"] = pve.get(api_key, 0)
+            
+        # Crafting Subcategories
+        crafting = lifetime.get("Crafting", {})
+        for api_key, display_name in sub_keys.items():
+            stats[f"Crafting - {display_name}"] = crafting.get(api_key, 0)
+            
+        # Gathering Subcategories (Nested under "All")
+        gathering = lifetime.get("Gathering", {}).get("All", {})
+        for api_key, display_name in sub_keys.items():
+            stats[f"Gathering - {display_name}"] = gathering.get(api_key, 0)
+            
         parsed_data.append(stats)
         
     return pd.DataFrame(parsed_data)
 
-# Load and process the data
+# Fetch and process data
 with st.spinner("Fetching data from Albion servers..."):
     raw_data = fetch_guild_data()
     df = process_data(raw_data)
 
 if not df.empty:
-    # Identify the columns that contain stats (everything except 'Name')
-    stat_columns = [col for col in df.columns if col != "Name"]
+    # Define our Main Categories
+    tabs = st.tabs(["Combat", "PvE", "Gathering", "Crafting"])
     
-    # Create a tab for every stat
-    tabs = st.tabs(stat_columns)
-    
-    for tab, stat_name in zip(tabs, stat_columns):
-        with tab:
-            st.subheader(f"🏆 Top players by {stat_name}")
-            
-            # Create a layout with a search bar
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                search_term = st.text_input(f"🔍 Search Player", key=f"search_{stat_name}")
-                
-            # Prepare the dataframe for this specific stat
-            # 1. Select Name and the specific stat
-            # 2. Sort descending
-            # 3. Reset index to create a clean ranking number
-            stat_df = df[["Name", stat_name]].sort_values(by=stat_name, ascending=False).reset_index(drop=True)
-            stat_df.index = stat_df.index + 1  # Make index 1-based instead of 0-based
-            stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
-            
-            # Apply search filter if the user typed something
-            if search_term:
-                stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
-                
-            # Formatting for better readability (adds commas to large numbers)
-            if stat_name != "Fame Ratio":
-                # Apply integer formatting with thousands separators for fame numbers
-                column_config = {
-                    stat_name: st.column_config.NumberColumn(
-                        stat_name,
-                        format="%d"
-                    )
-                }
-            else:
-                # Keep float formatting for Fame Ratio
-                column_config = {}
+    # Define which stats belong to which tab
+    category_mappings = {
+        "Combat": ["Kill Fame", "Death Fame", "Fame Ratio"],
+        "PvE": [col for col in df.columns if col.startswith("PvE - ")],
+        "Gathering": [col for col in df.columns if col.startswith("Gathering - ")],
+        "Crafting": [col for col in df.columns if col.startswith("Crafting - ")]
+    }
 
-            # Display the scrollable dataframe
-            st.dataframe(
-                stat_df,
-                use_container_width=True,
-                hide_index=True,
-                height=500, # This height enforces the scrollable container
-                column_config=column_config
-            )
+    # Function to render the UI for a specific tab
+    def render_tab_content(tab_name, stat_columns):
+        # Clean up names for the dropdown box (e.g. "PvE - Avalon" -> "Avalon")
+        display_options = [col.split(" - ")[-1] if " - " in col else col for col in stat_columns]
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            selected_display = st.selectbox("Select Subcategory", display_options, key=f"select_{tab_name}")
+        with col2:
+            search_term = st.text_input("Search Player", key=f"search_{tab_name}")
+            
+        # Get the actual dataframe column name based on selection
+        actual_stat_name = stat_columns[display_options.index(selected_display)]
+        
+        # Prepare Data
+        stat_df = df[["Name", actual_stat_name]].copy()
+        stat_df = stat_df.sort_values(by=actual_stat_name, ascending=False).reset_index(drop=True)
+        stat_df.index = stat_df.index + 1
+        stat_df = stat_df.reset_index().rename(columns={"index": "Rank"})
+        
+        # Filter by search
+        if search_term:
+            stat_df = stat_df[stat_df["Name"].str.contains(search_term, case=False, na=False)]
+            
+        # Format commas and center text using Pandas Styler
+        format_dict = {actual_stat_name: "{:,.2f}" if "Ratio" in actual_stat_name else "{:,}"}
+        
+        styled_df = stat_df.style \
+            .set_properties(**{'text-align': 'center'}) \
+            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]) \
+            .format(format_dict)
+            
+        st.dataframe(
+            styled_df,
+            use_container_width=True,
+            hide_index=True,
+            height=500
+        )
+
+    # Render each tab
+    for tab, tab_name in zip(tabs, ["Combat", "PvE", "Gathering", "Crafting"]):
+        with tab:
+            st.subheader(f"{tab_name} Rankings")
+            render_tab_content(tab_name, category_mappings[tab_name])
+
 else:
     st.warning("No data found or failed to parse the guild data.")
